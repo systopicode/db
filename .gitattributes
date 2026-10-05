@@ -1,0 +1,3 @@
+# what a composer download (dist) leaves out - the repo keeps them
+/.gitignore export-ignore
+/.gitattributes export-ignore

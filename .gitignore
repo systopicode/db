@@ -1,0 +1,19 @@
+# local only - never part of the package
+/.cursor/
+/.vscode/
+/vendor/
+/composer.lock
+
+# the sync's own files - a .sync/.htsync carries keys and trusted instances
+/.sync
+/.sync.cookies
+/sync.zip
+/.htsync
+/.htsync.zip
+/.htsync.cookies
+/sync.php
+
+# per machine config, os leftovers
+*.local.json
+.DS_Store
+Thumbs.db

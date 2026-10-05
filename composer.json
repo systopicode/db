@@ -1,0 +1,20 @@
+{
+  "name": "systopic/db",
+  "description": "ORM of the systopic packages: connection, rows, scopes, schema, provisioning.",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.4",
+    "ext-pdo": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Systopic\\Db\\": "src/"
+    }
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-main": "1.x-dev"
+    }
+  }
+}
