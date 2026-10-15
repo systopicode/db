@@ -22,6 +22,8 @@ use Systopic\Db\Result\LoadGroup;
  *     commit, not in the setter
  *   - the objects built on top of rows — one facet per (class, key), so
  *     the tree and the editor look at the same `Page`
+ *   - the observers — told of every result handed out and every commit
+ *     (`Observer`), registered once for all scopes
  *
  * It knows nothing of the application: no language, no preview flag. Those
  * are `Queries\Params`, a value, and the two are handed around together.
@@ -50,6 +52,24 @@ final class Scope
 
     /** Statements this scope has cost. The check step reads it. */
     private int $queries = 0;
+
+    /** @var list<Observer> for every scope of the process */
+    private static array $observers = [];
+
+    /**
+     * Reads while `objectFor()` builds, one frame per build in progress.
+     *
+     * @var list<list<array{0: string, 1: Rows}>>
+     */
+    private array $capturing = [];
+
+    /**
+     * The reads an object was built from — told again on every hit, or the
+     * second reader of a cached `Project` would never learn what it depends on.
+     *
+     * @var array<class-string, array<string, list<array{0: string, 1: Rows}>>>
+     */
+    private array $objectReads = [];
 
     /**
      * Without a connection it connects on first use — a scope for a test
@@ -116,6 +136,7 @@ final class Scope
         if ($cache) {
             $hit = $this->results->get($key);
             if ($hit !== null) {
+                $this->read($key, $hit);
                 return $hit;
             }
         }
@@ -127,6 +148,7 @@ final class Scope
             ->run($params);
         $this->queries++;
         $this->track($rows->group(), $rows->records());
+        $this->read($key, $rows);
         return $cache ? $this->results->put($key, $rows) : $rows;
     }
 
@@ -254,12 +276,66 @@ final class Scope
      */
     public function objectFor(string $class, string $key, Closure $make): mixed
     {
-        return $this->objects[$class][$key] ??= $make();
+        if (self::$observers === []) {
+            return $this->objects[$class][$key] ??= $make();
+        }
+        if (isset($this->objects[$class][$key])) {
+            foreach ($this->objectReads[$class][$key] ?? [] as [$readKey, $rows]) {
+                $this->read($readKey, $rows);
+            }
+            return $this->objects[$class][$key];
+        }
+        $this->capturing[] = [];
+        try {
+            $object = $make();
+        } finally {
+            $this->objectReads[$class][$key] = array_pop($this->capturing);
+        }
+        return $this->objects[$class][$key] = $object;
     }
 
     public function hasObject(string $class, string $key): bool
     {
         return isset($this->objects[$class][$key]);
+    }
+
+    // ---------------------------------------------------------- observers
+
+    /**
+     * Be told of every result handed out and every commit, in every scope of
+     * the process (`Observer`). For a package at boot; the closure returned
+     * takes it off again (tests).
+     */
+    public static function addObserver(Observer $observer): Closure
+    {
+        self::$observers[] = $observer;
+        return static function () use ($observer): void {
+            self::$observers = array_values(array_filter(self::$observers, static fn(Observer $o) => $o !== $observer));
+        };
+    }
+
+    /** A result went out: to the builds in progress and to the observers. */
+    private function read(string $key, Rows $rows): void
+    {
+        if (self::$observers === []) {
+            return;
+        }
+        foreach (array_keys($this->capturing) as $frame) {
+            $this->capturing[$frame][] = [$key, $rows];
+        }
+        $this->tell(static fn(Observer $observer) => $observer->read($key, $rows));
+    }
+
+    /** An observer that throws is reported, never passed on: the data is in. */
+    private function tell(Closure $call): void
+    {
+        foreach (self::$observers as $observer) {
+            try {
+                $call($observer);
+            } catch (\Throwable $e) {
+                trigger_error('Scope observer ' . $observer::class . ': ' . $e->getMessage(), E_USER_WARNING);
+            }
+        }
     }
 
     // ---------------------------------------------------------- listeners
@@ -298,7 +374,7 @@ final class Scope
     /**
      * @internal `UnitOfWork` reports what it wrote, after the transaction held.
      *
-     * @param list<TableRow> $written  rows inserted or updated, changes still on them
+     * @param list<TableRow> $written  rows inserted, or updated with a value that differs; changes still on them
      * @param list<TableRow> $removed  rows deleted
      */
     public function committed(array $written, array $removed): void
@@ -311,6 +387,9 @@ final class Scope
         // it was loaded on — go with them: a facet that kept its old level
         // would answer `children` from before the write. The rows stay.
         $this->objects = [];
+        $this->objectReads = [];
+
+        $this->tell(static fn(Observer $observer) => $observer->committed($written, $removed));
 
         foreach ($written as $row) {
             $listeners = $this->listeners[$row::class] ?? [];

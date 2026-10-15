@@ -36,6 +36,9 @@ final class UnitOfWork
     /** @var list<string> what was executed last — for tests and debugging */
     private array $log = [];
 
+    /** @var array<int, true> spl_object_id of the rows this commit inserted */
+    private array $inserted = [];
+
     public function __construct(
         private readonly Connection $connection,
         private readonly ?IdentityMap $identity = null,
@@ -117,10 +120,18 @@ final class UnitOfWork
         // a write that was rolled back. The changes are still on the rows
         // (`markSaved()` cleared what to write, not what changed); the scope
         // reads them and the rows forget them afterwards.
+        //
+        // Reported are the rows that CHANGED: new ones, and stored ones with
+        // a value that differs. A field saved with the value it already had
+        // (a form that saves on blur) is an UPDATE, but nothing changed — and
+        // an observer that announces it to every open browser would have them
+        // all re-render for nothing.
         $removed = $this->toRemove;
+        $changed = array_values(array_filter($ordered, fn(TableRow $row): bool => isset($this->inserted[spl_object_id($row)]) || $row->changes() !== []));
         $this->toPersist = [];
         $this->toRemove  = [];
-        $this->scope?->committed($ordered, $removed);
+        $this->inserted  = [];
+        $this->scope?->committed($changed, $removed);
         foreach ($ordered as $row) {
             $row->forgetChanges();
         }
@@ -260,6 +271,7 @@ final class UnitOfWork
             $this->connection->run($sql, array_values($values));
         }
         $this->log[] = $sql;
+        $this->inserted[spl_object_id($row)] = true;
 
         if ($table->keyIsId) {
             $row->id = $this->connection->lastInsertId();
