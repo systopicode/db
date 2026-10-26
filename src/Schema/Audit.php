@@ -64,14 +64,17 @@ final class Audit
         $classes ??= array_values(Registry::all());
 
         $known = [];
+        $prefixes = [Schema::defaultTablePrefix() => true];
         foreach ($classes as $class) {
             $table = Schema::of($class);
             $known[$table->name] = true;
+            $prefix = defined($class . '::TABLE_PREFIX') ? (string) constant($class . '::TABLE_PREFIX') : '';
+            $prefixes[$prefix !== '' ? $prefix : Schema::defaultTablePrefix()] = true;
             $this->auditTable($table);
         }
 
         if ($full) {
-            $this->auditOrphanTables($known);
+            $this->auditOrphanTables($known, array_keys($prefixes));
         }
         $this->auditMigrations();
 
@@ -365,13 +368,32 @@ final class Audit
         }
     }
 
-    /** @param array<string, true> $known */
-    private function auditOrphanTables(array $known): void
+    /**
+     * Tables under a prefix some class uses, with no class of their own.
+     *
+     * Every prefix of the registered classes counts, not only the
+     * installation's own: `usm_` belongs to the system package, and a table it
+     * renamed (`usm_login_codes` → `usm_logincodes`) would otherwise stay in
+     * the database forever, unseen. The registry is complete here - a full
+     * audit runs after `Registry::scanTables()` - so a prefix that is known
+     * is known with all of its tables.
+     *
+     * @param array<string, true> $known
+     * @param list<string>        $prefixes
+     */
+    private function auditOrphanTables(array $known, array $prefixes): void
     {
-        $prefix = Schema::defaultTablePrefix();
-        if ($prefix === '') {
-            return;   // without a prefix every foreign table would look orphaned
+        foreach ($prefixes as $prefix) {
+            if ($prefix === '') {
+                continue;   // without a prefix every foreign table would look orphaned
+            }
+            $this->auditOrphanTablesOf($prefix, $known);
         }
+    }
+
+    /** @param array<string, true> $known */
+    private function auditOrphanTablesOf(string $prefix, array $known): void
+    {
         foreach ($this->connection->all(
             'SELECT TABLE_NAME FROM information_schema.TABLES
               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE ?',
