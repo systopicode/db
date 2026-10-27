@@ -540,6 +540,7 @@ final class Audit
               ORDER BY ORDINAL_POSITION',
             [$table],
         ) as $row) {
+            $row['COLUMN_DEFAULT'] = Column::schemaDefault($row['COLUMN_DEFAULT'], $this->connection->isMariaDb());
             $rendered = $row['COLUMN_TYPE'] . ($row['IS_NULLABLE'] === 'YES' ? ' NULL' : ' NOT NULL');
             if (str_contains((string) $row['EXTRA'], 'auto_increment')) {
                 $rendered .= ' AUTO_INCREMENT';

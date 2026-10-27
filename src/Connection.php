@@ -141,6 +141,21 @@ final class Connection
         };
     }
 
+    private ?bool $mariaDb = null;
+
+    /**
+     * MariaDB speaks the mysql driver too, but `information_schema` answers
+     * differently there - see Column::schemaDefault(). The server says it in
+     * its version string ("10.11.6-MariaDB-…", or "5.5.5-10.11.6-MariaDB").
+     */
+    public function isMariaDb(): bool
+    {
+        return $this->mariaDb ??= str_contains(
+            strtolower((string) $this->pdo->getAttribute(PDO::ATTR_SERVER_VERSION)),
+            'mariadb'
+        );
+    }
+
     // ------------------------------------------------------------- executing
 
     /**

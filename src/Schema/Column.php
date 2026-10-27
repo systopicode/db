@@ -100,6 +100,31 @@ final class Column
     }
 
     /**
+     * `information_schema.COLUMNS.COLUMN_DEFAULT` as MySQL reports it: NULL
+     * for no default, the bare value otherwise.
+     *
+     * MariaDB (since 10.2.7) reports the SQL text instead: `NULL` for a
+     * nullable column without a default, a string quoted (`'abc'`), an
+     * expression as written (`current_timestamp()`). Taken as it comes, every
+     * nullable column reads `DEFAULT 'NULL'` - a difference the audit can
+     * never remove, because the `MODIFY` it runs writes what is already there.
+     */
+    public static function schemaDefault(mixed $raw, bool $mariaDb): mixed
+    {
+        if (!$mariaDb || $raw === null) {
+            return $raw;
+        }
+        $raw = (string) $raw;
+        if (strtoupper($raw) === 'NULL') {
+            return null;
+        }
+        if (strlen($raw) >= 2 && $raw[0] === "'" && $raw[-1] === "'") {
+            return str_replace(["''", "\\'"], "'", substr($raw, 1, -1));
+        }
+        return $raw;
+    }
+
+    /**
      * Two renderings compared the way the engine would compare them.
      *
      * **Normalised, not truncated.** What this has to guarantee is that the
