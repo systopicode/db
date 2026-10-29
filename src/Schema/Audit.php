@@ -231,23 +231,34 @@ final class Audit
         }
 
         // present but no longer declared
+        $q = $this->connection->platform()->quote(...);
+        $constraints = null;
         foreach ($actual as $name => $info) {
             if (isset($table->columns[$name])) {
                 continue;
             }
             $filled = $this->filledCount($table->name, $name, (string) ($info['DATA_TYPE'] ?? ''));
+            // A column a foreign key still sits on cannot go: 1828 "needed in
+            // a foreign key constraint", and switching the checks off does
+            // not help — that only skips checking the data. The constraint
+            // goes first, in the same action; the index MySQL made for it
+            // goes with the column.
+            $constraints ??= $this->constraintsOn($table->name);
+            $statements = [];
+            foreach ($constraints[$name] ?? [] as [$owner, $constraint]) {
+                $statements[] = 'ALTER TABLE ' . $q($owner) . ' DROP FOREIGN KEY ' . $q($constraint);
+            }
+            $statements[] = 'ALTER TABLE ' . $q($table->name) . ' DROP COLUMN ' . $q($name);
             $this->actions[] = new AuditAction(
                 kind: AuditKind::DropColumn,
                 subject: $table->name . '.' . $name,
                 describe: sprintf(
-                    '%s orphaned, %d of %d rows filled%s',
+                    '%s orphaned, %d of %d rows filled%s%s',
                     $info['rendered'], $filled, $rows,
+                    isset($constraints[$name]) ? sprintf(', %d foreign key(s) dropped first', count($constraints[$name])) : '',
                     $filled === 0 ? '  -> safe' : '',
                 ),
-                statements: [
-                    'ALTER TABLE ' . $this->connection->platform()->quote($table->name)
-                    . ' DROP COLUMN ' . $this->connection->platform()->quote($name),
-                ],
+                statements: $statements,
                 lossless: false,
                 filled: $filled,
             );
@@ -530,6 +541,32 @@ final class Audit
     // -------------------------------------------------------------- lookup
 
     /** @return array<string, array<string, mixed>> */
+    /**
+     * The foreign keys a column of this table is part of — its own, and
+     * those of other tables that reference it.
+     *
+     * @return array<string, list<array{0: string, 1: string}>> column => [table that owns the constraint, constraint name]
+     */
+    private function constraintsOn(string $table): array
+    {
+        $out = [];
+        foreach ($this->connection->all(
+            'SELECT DISTINCT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+               FROM information_schema.KEY_COLUMN_USAGE
+              WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL
+                AND (TABLE_NAME = ? OR REFERENCED_TABLE_NAME = ?)',
+            [$table, $table],
+        ) as $key) {
+            if ($key['TABLE_NAME'] === $table) {
+                $out[(string) $key['COLUMN_NAME']][] = [$table, (string) $key['CONSTRAINT_NAME']];
+            }
+            if ($key['REFERENCED_TABLE_NAME'] === $table && $key['TABLE_NAME'] !== $table) {
+                $out[(string) $key['REFERENCED_COLUMN_NAME']][] = [(string) $key['TABLE_NAME'], (string) $key['CONSTRAINT_NAME']];
+            }
+        }
+        return $out;
+    }
+
     private function columnsOf(string $table): array
     {
         $out = [];
