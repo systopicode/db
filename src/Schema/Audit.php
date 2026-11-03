@@ -424,12 +424,12 @@ final class Audit
             // reads on every panel load. Since the key is a tuple, a junction
             // has a class like anything else and is judged like anything else.
             //
-            // What remains out of scope is a table with **no** primary key at
-            // all. There is nothing to identify a row by, so this layer has
-            // nothing to say about it — including whether it is still in use.
-            if ($this->primaryColumnsOf($name) === []) {
-                continue;
-            }
+            // A table without a primary key is orphaned all the same: no class
+            // describes it, under a prefix the classes use. It used to be left
+            // out — "nothing to identify a row by" — but whether a table is in
+            // use is not a question of its key: `log_iplocations` (one row per
+            // ip, the key never declared) stayed in every database, unseen.
+            // A table the system needs has a class (sys_migration_hooks).
             $rows = $this->rowCount($name);
             $this->actions[] = new AuditAction(
                 kind: AuditKind::DropTable,

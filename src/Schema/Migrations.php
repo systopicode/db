@@ -156,7 +156,7 @@ final class Migrations
         $connection->exec(
             'CREATE TABLE IF NOT EXISTS ' . self::TABLE . ' ('
             . ' migration_hook_id int unsigned NOT NULL AUTO_INCREMENT,'
-            . ' ' . self::COLUMN . ' varchar(190) NOT NULL,'
+            . ' ' . self::COLUMN . " varchar(190) NOT NULL DEFAULT '',"
             . ' PRIMARY KEY (migration_hook_id),'
             . ' UNIQUE KEY uk_' . self::COLUMN . ' (' . self::COLUMN . ')'
             . ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
