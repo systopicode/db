@@ -93,12 +93,14 @@ final class UnitOfWork
 
     /**
      * Write everything inside one transaction.
+     * An optional precondition runs inside that transaction, before any writes.
+     * Throwing rejects the whole unit without notifying observers.
      *
      * Order: create and change first, delete afterwards. Whoever creates one
      * row and removes another in the same go normally wants the new one to be
      * there by the time the old one leaves.
      */
-    public function commit(): self
+    public function commit(?callable $beforeWrite = null): self
     {
         if ($this->toPersist === [] && $this->toRemove === []) {
             return $this;
@@ -106,7 +108,8 @@ final class UnitOfWork
 
         $ordered = $this->ordered();
 
-        $this->connection->transactional(function () use ($ordered) {
+        $this->connection->transactional(function () use ($ordered, $beforeWrite) {
+            if ($beforeWrite !== null) $beforeWrite($this->connection);
             foreach ($ordered as $row) {
                 $this->isNew($row) ? $this->insert($row) : $this->update($row);
             }
