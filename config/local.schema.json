@@ -1,0 +1,24 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "Database",
+	"description": "packages.db in config.local.json: this machine, neither git nor sync.",
+	"type": "object",
+	"properties": {
+		"connections": {
+			"title": "Connections",
+			"type": "object",
+			"additionalProperties": {
+				"title": "Connection",
+				"type": "object",
+				"properties": {
+					"pass": {
+						"title": "Password",
+						"type": "string",
+						"writeOnly": true,
+						"x-mandatory": "input"
+					}
+				}
+			}
+		}
+	}
+}
