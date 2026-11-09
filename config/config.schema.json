@@ -3,6 +3,7 @@
 	"title": "Database",
 	"description": "packages.db: the databases of the installation.",
 	"type": "object",
+	"x-icon": "database",
 	"required": ["connections"],
 	"properties": {
 		"connections": {
