@@ -13,6 +13,7 @@
 				"properties": {
 					"pass": {
 						"title": "Password",
+						"description": "The password of the database user. Only on this machine, never in git or the sync.",
 						"type": "string",
 						"writeOnly": true,
 						"x-mandatory": "input"
