@@ -18,11 +18,11 @@
 				"required": ["name"],
 				"properties": {
 					"driver": { "title": "Engine", "description": "mysql for MySQL and MariaDB, pgsql for PostgreSQL.", "type": "string", "enum": ["mysql", "pgsql"], "default": "mysql" },
-					"host": { "title": "Host", "description": "The database server: a name or an IP, localhost on the same machine.", "type": "string", "default": "localhost" },
-					"port": { "title": "Port", "description": "Empty: the default port of the engine (mysql 3306, pgsql 5432).", "type": "integer", "minimum": 1, "maximum": 65535 },
-					"name": { "title": "Database", "description": "The name of the database on the server. A new connection starts with its own name.", "type": "string", "x-entry-name": true },
-					"user": { "title": "User", "description": "The user the connection signs in with.", "type": "string", "default": "root" },
-					"pass": { "title": "Password", "description": "The password of the database user.", "type": "string", "writeOnly": true, "x-mandatory": "input" },
+					"host": { "title": "Host", "description": "The database server: a name or an IP, localhost on the same machine.", "type": "string", "default": "localhost", "x-setup": true },
+					"port": { "title": "Port", "description": "Empty: the default port of the engine (mysql 3306, pgsql 5432).", "type": "integer", "minimum": 1, "maximum": 65535, "x-setup": true },
+					"name": { "title": "Database", "description": "The name of the database on the server. A new connection starts with its own name.", "type": "string", "x-entry-name": true, "x-setup": true },
+					"user": { "title": "User", "description": "The user the connection signs in with.", "type": "string", "default": "root", "x-setup": true },
+					"pass": { "title": "Password", "description": "The password of the database user.", "type": "string", "writeOnly": true, "x-mandatory": "input", "x-setup": true },
 					"charset": { "title": "Charset", "description": "The character set of the connection. mysql only.", "type": "string", "default": "utf8" }
 				}
 			}
