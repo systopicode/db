@@ -62,6 +62,34 @@ final class Registry
     /** @var array<string, string> announced `Tables/` directories => namespace */
     private static array $sources = [];
 
+    /** @var array<string, true> tables a package used to own, by name */
+    private static array $retired = [];
+
+    /**
+     * A package names tables it used to own and no longer has a class for -
+     * from its Composer `autoload.files`, like `addTables()`.
+     *
+     * The audit judges a table without a class only under a prefix some
+     * class still uses. Removing the last class of a prefix therefore made
+     * its tables invisible instead of orphaned: `log_requests` went with its
+     * model (2026-11-11), `log` was nobody's prefix any more, and the audit
+     * called both log tables another application's. A retired table is
+     * offered for removal whatever its prefix - by name, so a foreign table
+     * that happens to share the prefix stays out of scope.
+     */
+    public static function retire(string ...$tables): void
+    {
+        foreach ($tables as $table) {
+            self::$retired[$table] = true;
+        }
+    }
+
+    /** @return list<string> */
+    public static function retired(): array
+    {
+        return array_keys(self::$retired);
+    }
+
     /**
      * A package announces its `Tables/` directory — from its Composer
      * `autoload.files`, so it is known before the first query. Scanned on

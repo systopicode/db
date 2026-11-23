@@ -75,6 +75,7 @@ final class Audit
 
         if ($full) {
             $this->auditOrphanTables($known, array_keys($prefixes));
+            $this->auditRetiredTables($known);
         }
         $this->auditMigrations();
 
@@ -430,16 +431,51 @@ final class Audit
             // use is not a question of its key: `log_iplocations` (one row per
             // ip, the key never declared) stayed in every database, unseen.
             // A table the system needs has a class (sys_migration_hooks).
-            $rows = $this->rowCount($name);
-            $this->actions[] = new AuditAction(
-                kind: AuditKind::DropTable,
-                subject: $name,
-                describe: sprintf('whole table orphaned, %d rows%s', $rows, $rows === 0 ? '  -> safe' : ''),
-                statements: ['DROP TABLE ' . $this->connection->platform()->quote($name)],
-                lossless: false,
-                filled: $rows,
-            );
+            $this->dropTable($name, 'whole table orphaned');
         }
+    }
+
+    /**
+     * Tables a package retired (`Registry::retire()`), whatever their prefix -
+     * once a prefix has no class left, `auditOrphanTables()` does not look
+     * there any more. Skipped when that already offered the table, or a class
+     * describes it again.
+     *
+     * @param array<string, true> $known
+     */
+    private function auditRetiredTables(array $known): void
+    {
+        $offered = [];
+        foreach ($this->actions as $action) {
+            if ($action->kind === AuditKind::DropTable) {
+                $offered[$action->subject] = true;
+            }
+        }
+        foreach (Registry::retired() as $name) {
+            if (isset($known[$name]) || isset($offered[$name])) {
+                continue;
+            }
+            $exists = (int) $this->connection->value(
+                'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+                [$name],
+            );
+            if ($exists > 0) {
+                $this->dropTable($name, 'whole table retired');
+            }
+        }
+    }
+
+    private function dropTable(string $name, string $why): void
+    {
+        $rows = $this->rowCount($name);
+        $this->actions[] = new AuditAction(
+            kind: AuditKind::DropTable,
+            subject: $name,
+            describe: sprintf('%s, %d rows%s', $why, $rows, $rows === 0 ? '  -> safe' : ''),
+            statements: ['DROP TABLE ' . $this->connection->platform()->quote($name)],
+            lossless: false,
+            filled: $rows,
+        );
     }
 
     /**
